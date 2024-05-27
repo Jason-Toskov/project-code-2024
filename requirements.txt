@@ -9,3 +9,12 @@ accelerate
 torch
 bitsandbytes
 peft
+scikit-learn
+trl
+peft
+ninja
+packaging
+wheel
+pillow
+matplotlib
+jupyter

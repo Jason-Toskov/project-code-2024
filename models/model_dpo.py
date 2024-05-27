@@ -1,9 +1,13 @@
+import copy
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
-from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM
+from datasets import Dataset
 from models.model_base import PreTrainedModelWrapper
+from tqdm import tqdm
+from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM, Conversation, pipeline
+
 
 class AutoDPOModelForCausalLM(PreTrainedModelWrapper):
     """
@@ -42,6 +46,7 @@ class AutoDPOModelForCausalLM(PreTrainedModelWrapper):
             kwargs (`dict`, `optional`):
                 Additional keyword arguments, that are passed to any `CustomModule` class.
         """
+        kwargs["torch_dtype"] = torch.float16
         super().__init__(pretrained_model, **kwargs)
 
         if not any(hasattr(self.pretrained_model, attribute) for attribute in self.lm_head_namings):
@@ -293,14 +298,88 @@ class AutoDPOModelForCausalLM(PreTrainedModelWrapper):
         Returns:
             output_dict (`dict`): A dictionary containing the model predictions given input questions.
         """
+        
+        chatbot = pipeline("conversational", model=self.pretrained_model, tokenizer=tokenizer)
+        
+        system_msg = {"role": "system", "content": "You are an expert professor, teaching a student how to solve a problem by providing a full explanation of the solution."}
+
+        mcq_msg = {"role": "user", "content": "Now, based off of the explanation you have given, give the correct answer as a single letter only, e.g. `A`, `B`, `C` or `D`."}
+
+        dataset = Dataset.from_dict(batch)
+        
         output_dict = {"preds": []}
+
+        for dp in tqdm(dataset):
+            conversation = Conversation()
+            conversation.add_message(system_msg)
+            conversation.add_message({"role": "user", "content": dp["question"]})
+
+            conversation = chatbot(
+                conversation,
+                max_new_tokens=2048,
+                do_sample=True,
+                temperature=1.0,
+                top_k=50,
+                top_p=0.9,
+                eos_token_id=tokenizer.eos_token_id,
+                pad_token_id=tokenizer.pad_token_id
+            )
+            
+            conversation.add_message(mcq_msg)
+            
+            # print("init done!!")
+            print(f"True answer: {dp['answer']}")
+            
+            sample_answers = []
+            answers_list = []
+            for i in range(10):
+                conversation_sample = chatbot(
+                    copy.deepcopy(conversation),
+                    max_new_tokens=16,
+                    do_sample=True,
+                    temperature=1.0,
+                    top_k=50,
+                    top_p=0.9,
+                    eos_token_id=tokenizer.eos_token_id,
+                    pad_token_id=tokenizer.pad_token_id
+                )
+                
+                answer_string = conversation_sample.messages[-1]["content"]
+                answers_list.append(answer_string)
+                
+                # print(answer_string)
+                # print("============")
+                
+                if answer_string[0] in ["A", "B", "C", "D", "E"]:
+                    sample_answers.append(answer_string[0])
+                    continue
+                
+                if answer_string[:3] in ["`A`", "`B`", "`C`", "`D`", "`E`"]:
+                    sample_answers.append(answer_string[1])
+                    continue
+                
+                for match in ["`A`", "`B`", "`C`", "`D`", "`E`"]:
+                    if match in answer_string:
+                        sample_answers.append(match[1])
+                        continue
+            
+            if len(sample_answers) == 0:
+                raise ValueError("No valid answer found.")
+            
+            print(sample_answers)
+            # Get the most frequent answer
+            answer = max(set(sample_answers), key=sample_answers.count)
+            
+            # assert False
+                
+            output_dict["preds"].append(answer)
 
         ########################################################################
         # TODO: Please implement the prediction step that generates the prediction of the given MCQA question
         # ======================================================================
         # You need to return one letter prediction for each question.
         # ======================================================================
-        raise NotImplementedError
+        # raise NotImplementedError
         ########################################################################
 
         return output_dict
