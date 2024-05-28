@@ -472,7 +472,7 @@ class AutoDPOModelForCausalLM(PreTrainedModelWrapper):
         # Here we'll use a conversational pipeline to generate the MCQA answers
         # Allows for easy multi-step generation
         
-        chatbot = pipeline("conversational", model=self.pretrained_model, tokenizer=tokenizer)
+        chatbot = pipeline("conversational", model=self.pretrained_model, tokenizer=tokenizer, device=self.pretrained_model.device)
         
         system_msg = {"role": "system", "content": "You are an expert professor, teaching a student how to solve a problem by providing a full explanation of the solution."}
 
