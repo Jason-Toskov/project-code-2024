@@ -501,7 +501,7 @@ class AutoDPOModelForCausalLM(PreTrainedModelWrapper):
             conversation.add_message(mcq_msg)
             
             # print("init done!!")
-            print(f"True answer: {dp['answer']}")
+            # print(f"True answer: {dp['answer']}")
             
             # The generation of the clean mcq answer can be inconsistent
             # So, average over 10 tries to get the most common answer

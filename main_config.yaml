@@ -1,12 +1,11 @@
-"team_name": "Team 1" # Your team name
+"team_name": "never-leaving-paris" # Your team name
 "eval_method": ["mcqa"] # mcqa, reward, rag, compression
 "task_type": "causal_lm" # causal_lm, seq2seq
-"policy_model_path": "./llama3/" # Your path to the final checkpoint
-"reference_model_path": "./llama3/" # The repo id of your pretrained reference model
+"policy_model_path": "Jason-Toskov/llama3-8b-instruct-dpo-mnlp-never-leaving-paris" # Your path to the final checkpoint
+"reference_model_path": "Jason-Toskov/llama3-8b-instruct-dpo-mnlp-never-leaving-paris" # The repo id of your pretrained reference model
 "quantized_policy_model_path": "./checkpoints/best_model_quantized/" # Your path to the final quantized checkpoint
 "rag_policy_model_path": "./checkpoints/best_model_rag/" # Your path to the final RAG checkpoint
-"test_data_path": "./datasets/mcqa_example.jsonl" # Your path to the test data
-# "test_data_path": "./datasets/dpo_preference_example.jsonl" # Your path to the test data
+"test_data_path": "./data/mmlu.jsonl" # Your path to the test data
 "dpo_model_args":  # Put any model arguments required to load your DPO model below
   "reference_model": false
 "rag_model_args": # Put any model arguments required to load your rag model below
