@@ -6,8 +6,9 @@
 "quantized_policy_model_path": "./checkpoints/best_model_quantized/" # Your path to the final quantized checkpoint
 "rag_policy_model_path": "./checkpoints/best_model_rag/" # Your path to the final RAG checkpoint
 "test_data_path": "./datasets/mcqa_example.jsonl" # Your path to the test data
+# "test_data_path": "./datasets/dpo_preference_example.jsonl" # Your path to the test data
 "dpo_model_args":  # Put any model arguments required to load your DPO model below
-  "device_map": "auto"
+  "reference_model": false
 "rag_model_args": # Put any model arguments required to load your rag model below
   "encoder_model_path": "facebook/bart-large"
   "retriever_model_path": "./checkpoints/rag_retriever"

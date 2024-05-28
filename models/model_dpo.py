@@ -6,7 +6,15 @@ import torch.nn.functional as F
 from datasets import Dataset
 from models.model_base import PreTrainedModelWrapper
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM, Conversation, pipeline
+from transformers import (
+    AutoModelForCausalLM,
+    AutoModelForSeq2SeqLM,
+    AutoTokenizer,
+    Conversation,
+    TrainingArguments,
+    pipeline,
+)
+from trl import DPOTrainer
 
 
 class AutoDPOModelForCausalLM(PreTrainedModelWrapper):
@@ -32,7 +40,7 @@ class AutoDPOModelForCausalLM(PreTrainedModelWrapper):
 
     ####################################################################################
     # TODO (Optional): Please put any required arguments for your custom module here
-    supported_args = ()
+    supported_args = ("reference_model",)
     ####################################################################################
 
     def __init__(self, pretrained_model, **kwargs):
@@ -47,6 +55,8 @@ class AutoDPOModelForCausalLM(PreTrainedModelWrapper):
                 Additional keyword arguments, that are passed to any `CustomModule` class.
         """
         kwargs["torch_dtype"] = torch.float16
+        kwargs["device_map"] =  "auto"
+        self.is_ref_model = kwargs.get("reference_model", True)
         super().__init__(pretrained_model, **kwargs)
 
         if not any(hasattr(self.pretrained_model, attribute) for attribute in self.lm_head_namings):
@@ -160,6 +170,64 @@ class AutoDPOModelForCausalLM(PreTrainedModelWrapper):
 
             self.register_forward_hook(set_device_hook)
             self.is_sequential_parallel = True
+    
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        
+        model = super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        
+        ## TODO: Is there a better way of integrating the DPOTrainer functions into the model?
+        
+        model.args = TrainingArguments(
+            output_dir="llama3_new",               # directory to save and repository id
+            num_train_epochs=1,                     # number of training epochs
+            per_device_train_batch_size=1,         # batch size per device during training
+            per_device_eval_batch_size=1,           # batch size for evaluation
+            gradient_accumulation_steps=1,          # number of steps before performing a backward/update pass
+            gradient_checkpointing=True,            # use gradient checkpointing to save memory
+            optim="adamw_torch_fused",              # use fused adamw optimizer
+            learning_rate=5e-5,                     # 10x higher LR than QLoRA paper
+            max_grad_norm=0.3,                      # max gradient norm based on QLoRA paper
+            warmup_ratio=0.1,                       # warmup ratio based on QLoRA paper
+            lr_scheduler_type="cosine",             # use cosine learning rate scheduler
+            logging_steps=25,                       # log every 25 steps
+            save_steps=500,                         # when to save checkpoint
+            save_total_limit=2,                     # limit the total amount of checkpoints
+            evaluation_strategy="steps",            # evaluate every 1000 steps
+            eval_steps=700,                         # when to evaluate
+            bf16=True,                              # use bfloat16 precision
+            tf32=True,                              # use tf32 precision
+            push_to_hub=False,                      # push model to hub
+            report_to="tensorboard",                # report metrics to tensorboard
+        )
+        
+        model.dpo_args = {
+            "beta": 0.1,                            # The beta factor in DPO loss. Higher beta means less divergence
+            "loss_type": "sigmoid"                  # The loss type for DPO.
+        }
+
+        model.prompt_length = 402
+        model.max_seq_length = 912
+        
+        model.dpo_tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path)
+        model.dpo_tokenizer.pad_token = model.dpo_tokenizer.eos_token
+        model.dpo_tokenizer.padding_side = 'left' # to prevent errors with FA
+        model.dpo_tokenizer.truncation_side = 'left' # to prevent cutting off last generation
+        
+        model.dpo_trainer = DPOTrainer(
+            model.pretrained_model,
+            ref_model=None,
+            args=model.args,
+            train_dataset=Dataset.from_dict({}),
+            eval_dataset=Dataset.from_dict({}),
+            tokenizer=model.dpo_tokenizer,
+            max_length=model.max_seq_length,
+            max_prompt_length=model.prompt_length,
+            beta=model.dpo_args["beta"],
+            loss_type=model.dpo_args["loss_type"],
+        )
+        
+        return model
 
     def push_to_hub(self, *args, **kwargs):
         """Push the model to the Hugging Face hub."""
@@ -208,10 +276,19 @@ class AutoDPOModelForCausalLM(PreTrainedModelWrapper):
         ###############################################################
         # TODO: Please implement your customized forward pass here
         # =============================================================
-        raise NotImplementedError
+        # raise NotImplementedError
         ###############################################################
 
-        return output_dict
+        # As this is primarily adapted from DPOTrainer functions, the forward pass isn't really used
+
+        outputs = self.pretrained_model(
+            input_ids,
+            attention_mask=attention_mask,
+            use_cache=False,
+            **kwargs,
+        )
+
+        return outputs
 
     def get_logprobs(self, batch, tokenizer):
         """
@@ -238,8 +315,87 @@ class AutoDPOModelForCausalLM(PreTrainedModelWrapper):
         ###############################################################
         # TODO: Please implement your customized logprob computation here
         # =============================================================
-        raise NotImplementedError
+        # raise NotImplementedError
         ###############################################################
+        
+        # TODO: this is a horrible mess that needs to be cleaned up
+        
+        system_msg = {"role": "system", "content": "You are an expert professor, teaching a student how to solve a problem by providing a full explanation of the solution."}
+        
+        chosen_list = []
+        rejected_list = []
+        
+        for idx in tqdm(range(len(batch["prompt"]))):
+            msg_qn = {"role": "user", "content": batch["prompt"][idx]}
+            msg_chosen = {"role": "assistant", "content": batch["chosen"][idx]}
+            msg_rejected = {"role": "assistant", "content": batch["rejected"][idx]}
+            
+            dpo_dataset_dict = {
+                "prompt": [],
+                "chosen": [],
+                "rejected": [],
+            }
+            
+            dpo_dataset_dict["prompt"] = [system_msg, msg_qn]
+            dpo_dataset_dict["chosen"] = [msg_chosen]
+            dpo_dataset_dict["rejected"] = [msg_rejected]
+        
+            # dataset = Dataset.from_dict(dpo_dataset_dict)
+            
+            def process(row):
+                row["prompt"] = self.dpo_trainer.tokenizer.apply_chat_template(row["prompt"], tokenize=False)
+                row["chosen"] = self.dpo_trainer.tokenizer.apply_chat_template(row["chosen"], tokenize=False)
+                row["rejected"] = self.dpo_trainer.tokenizer.apply_chat_template(row["rejected"], tokenize=False)
+                return row
+            
+            dpo_dataset_dict["prompt"] = self.dpo_trainer.tokenizer.apply_chat_template(dpo_dataset_dict["prompt"], tokenize=False)
+            dpo_dataset_dict["chosen"] = self.dpo_trainer.tokenizer.apply_chat_template(dpo_dataset_dict["chosen"], tokenize=False)
+            dpo_dataset_dict["rejected"] = self.dpo_trainer.tokenizer.apply_chat_template(dpo_dataset_dict["rejected"], tokenize=False)
+            
+            # .map() is breaking for some reason
+            # dataset = dataset.map(
+            #     process,
+            #     num_proc=1,
+            #     load_from_cache_file=False,
+            # )
+        
+            data = self.dpo_trainer.tokenize_row(dpo_dataset_dict)
+            
+            new_ds_dict = {}
+            for k,v in data.items():
+                new_ds_dict[k] = [v]
+        
+            dataset = Dataset.from_dict(new_ds_dict)
+            
+            ds_loader = self.dpo_trainer.get_eval_dataloader(dataset)
+
+            random_batch_dataset = ds_loader.dataset.select([0])
+            random_batch = self.dpo_trainer.data_collator(random_batch_dataset)
+            random_batch = self.dpo_trainer._prepare_inputs(random_batch)
+            
+            with torch.no_grad():
+                if self.is_ref_model:
+                    # The ref model is just the model without lora
+                    with self.dpo_trainer.null_ref_context():
+                        (
+                            step_chosen_logps,
+                            step_rejected_logps,
+                            _,
+                            _,
+                        ) = self.dpo_trainer.concatenated_forward(self.dpo_trainer.model, random_batch)
+                else:
+                    (
+                        step_chosen_logps,
+                        step_rejected_logps,
+                        _,
+                        _,
+                    ) = self.dpo_trainer.concatenated_forward(self.dpo_trainer.model, random_batch)
+            
+            chosen_list.append(step_chosen_logps[0].item())
+            rejected_list.append(step_rejected_logps[0].item())
+
+        chosen_logps = torch.tensor(chosen_list)
+        rejected_logps = torch.tensor(rejected_list)
 
         return chosen_logps, rejected_logps
 
@@ -267,18 +423,32 @@ class AutoDPOModelForCausalLM(PreTrainedModelWrapper):
             output_dict (`dict`):
                 A dictionary containing the reward scores of the chosen and rejected responses.
         """
-        output_dict = {
-            "chosen_rewards": [],
-            "rejected_rewards": []
-        }
+        # output_dict = {
+        #     "chosen_rewards": [],
+        #     "rejected_rewards": []
+        # }
 
         ########################################################################
         # TODO: Please implement the prediction step that computes the rewards
         # ======================================================================
         # You need to return one reward score for each chosen and rejected response.
         # ======================================================================
-        raise NotImplementedError
+        # raise NotImplementedError
         ########################################################################
+
+        # Rewards come directly from the DPOTrainer loss
+
+        losses, chosen_rewards, rejected_rewards = self.dpo_trainer.dpo_loss(
+            policy_chosen_logps,
+            policy_rejected_logps,
+            reference_chosen_logps,
+            reference_rejected_logps,
+        )
+        
+        output_dict = {
+            "chosen_rewards": chosen_rewards.tolist(),
+            "rejected_rewards": rejected_rewards.tolist()
+        }
 
         return output_dict
 
@@ -298,6 +468,9 @@ class AutoDPOModelForCausalLM(PreTrainedModelWrapper):
         Returns:
             output_dict (`dict`): A dictionary containing the model predictions given input questions.
         """
+        
+        # Here we'll use a conversational pipeline to generate the MCQA answers
+        # Allows for easy multi-step generation
         
         chatbot = pipeline("conversational", model=self.pretrained_model, tokenizer=tokenizer)
         
@@ -330,6 +503,8 @@ class AutoDPOModelForCausalLM(PreTrainedModelWrapper):
             # print("init done!!")
             print(f"True answer: {dp['answer']}")
             
+            # The generation of the clean mcq answer can be inconsistent
+            # So, average over 10 tries to get the most common answer
             sample_answers = []
             answers_list = []
             for i in range(10):
@@ -350,14 +525,17 @@ class AutoDPOModelForCausalLM(PreTrainedModelWrapper):
                 # print(answer_string)
                 # print("============")
                 
+                # If the generation starts with a letter, use that
                 if answer_string[0] in ["A", "B", "C", "D", "E"]:
                     sample_answers.append(answer_string[0])
                     continue
                 
+                # or if the generation starts with `<letter>` (also common)
                 if answer_string[:3] in ["`A`", "`B`", "`C`", "`D`", "`E`"]:
                     sample_answers.append(answer_string[1])
                     continue
                 
+                # or finally if the generation contains `<letter>` (can happen sometimes)
                 for match in ["`A`", "`B`", "`C`", "`D`", "`E`"]:
                     if match in answer_string:
                         sample_answers.append(match[1])
@@ -366,11 +544,8 @@ class AutoDPOModelForCausalLM(PreTrainedModelWrapper):
             if len(sample_answers) == 0:
                 raise ValueError("No valid answer found.")
             
-            print(sample_answers)
             # Get the most frequent answer
             answer = max(set(sample_answers), key=sample_answers.count)
-            
-            # assert False
                 
             output_dict["preds"].append(answer)
 
