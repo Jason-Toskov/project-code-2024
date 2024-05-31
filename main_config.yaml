@@ -1,5 +1,5 @@
 "team_name": "never-leaving-paris" # Your team name
-"eval_method": ["mcqa"] # mcqa, reward, rag, compression
+"eval_method": ["mcqa"] # mcqa, reward, rag, quantiz
 "task_type": "causal_lm" # causal_lm, seq2seq
 "policy_model_path": "Jason-Toskov/llama3-8b-instruct-dpo-mnlp-never-leaving-paris" # Your path to the final checkpoint
 "reference_model_path": "Jason-Toskov/llama3-8b-instruct-dpo-mnlp-never-leaving-paris" # The repo id of your pretrained reference model
