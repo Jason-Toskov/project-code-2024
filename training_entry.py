@@ -127,7 +127,7 @@ def main(input_args):
     
     # save args
     with open(os.path.join(input_args.output_dir, input_args.run_name, "args.json"), "w") as f:
-        json.dump(vars(args), f)
+        json.dump(vars(input_args), f)
 
 
 if __name__ == "__main__":
