@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from datasets import Dataset
-from peft import AutoPeftModelForCausalLM, LoraConfig
+from peft import AutoPeftModelForCausalLM, LoraConfig, PeftModel
 from tqdm import tqdm
 from transformers import (
     AutoModelForCausalLM,
@@ -38,10 +38,10 @@ def set_seed(seed: int = 42) -> None:
 def main(input_args):
     set_seed(input_args.seed)
     
-    model_id = "meta-llama/Meta-Llama-3-8B-Instruct"
+    # model_id = "meta-llama/Meta-Llama-3-8B-Instruct"
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
-    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    tokenizer = AutoTokenizer.from_pretrained(input_args.model_id)
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = 'left' # to prevent errors with FA
     tokenizer.truncation_side = 'left' # to prevent cutting off last generation
@@ -59,13 +59,17 @@ def main(input_args):
 
     quantization_config = bnb_config if input_args.use_quantization else None
     model = AutoModelForCausalLM.from_pretrained(
-        model_id,
+        input_args.model_id,
         device_map=device,
         use_cache=False,
         attn_implementation="flash_attention_2",
         torch_dtype=torch.bfloat16,
         quantization_config=quantization_config
     )
+    
+    if input_args.pretrained_peft_path != "":
+        model = PeftModel.from_pretrained(model=model, model_id=input_args.pretrained_peft_path)
+        model = model.merge_and_unload()
 
     # LoRA config based on QLoRA paper & Sebastian Raschka experiment
     peft_config = LoraConfig(
@@ -136,6 +140,7 @@ if __name__ == "__main__":
     parser.add_argument("--output_dir", type=str, default="/scratch/toskov/mnlp/output")
     parser.add_argument("--data_path", type=str, default="/scratch/toskov/mnlp/dpo_hf_dataset.json")
     parser.add_argument("--model_id", type=str, default="meta-llama/Meta-Llama-3-8B-Instruct")
+    parser.add_argument("--pretrained_peft_path", type=str, default="")
     parser.add_argument("--use_quantization", action="store_true")
     
     parser.add_argument("--batch_size", type=int, default=1)
