@@ -10,6 +10,7 @@ from transformers import (
     AutoModelForCausalLM,
     AutoModelForSeq2SeqLM,
     AutoTokenizer,
+    BitsAndBytesConfig,
     Conversation,
     TrainingArguments,
     pipeline,
@@ -40,7 +41,7 @@ class AutoDPOModelForCausalLM(PreTrainedModelWrapper):
 
     ####################################################################################
     # TODO (Optional): Please put any required arguments for your custom module here
-    supported_args = ("reference_model",)
+    supported_args = ("reference_model", "use_system_msg", "quantized")
     ####################################################################################
 
     def __init__(self, pretrained_model, **kwargs):
@@ -57,6 +58,8 @@ class AutoDPOModelForCausalLM(PreTrainedModelWrapper):
         kwargs["torch_dtype"] = torch.float16
         kwargs["device_map"] =  "auto"
         self.is_ref_model = kwargs.get("reference_model", True)
+        self.use_sys_msg = kwargs.get("use_system_msg", False)
+        self.quantized = kwargs.get("quantized", False)
         super().__init__(pretrained_model, **kwargs)
 
         if not any(hasattr(self.pretrained_model, attribute) for attribute in self.lm_head_namings):
@@ -174,6 +177,14 @@ class AutoDPOModelForCausalLM(PreTrainedModelWrapper):
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         
+        if kwargs.get("quantized", False):
+            print("Quantized!")
+            bnb_config = BitsAndBytesConfig(
+                load_in_4bit=True, bnb_4bit_use_double_quant=True, bnb_4bit_quant_type="nf4", bnb_4bit_compute_dtype=torch.bfloat16
+            )
+        
+            kwargs["quantization_config"] = bnb_config
+        
         model = super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         
         ## TODO: Is there a better way of integrating the DPOTrainer functions into the model?
@@ -226,6 +237,8 @@ class AutoDPOModelForCausalLM(PreTrainedModelWrapper):
             beta=model.dpo_args["beta"],
             loss_type=model.dpo_args["loss_type"],
         )
+        
+        print(model.pretrained_model.get_memory_footprint())
         
         return model
 
@@ -472,7 +485,9 @@ class AutoDPOModelForCausalLM(PreTrainedModelWrapper):
         # Here we'll use a conversational pipeline to generate the MCQA answers
         # Allows for easy multi-step generation
         
-        chatbot = pipeline("conversational", model=self.pretrained_model, tokenizer=tokenizer, device=self.pretrained_model.device)
+        device = None if self.quantized else self.pretrained_model.device
+        
+        chatbot = pipeline("conversational", model=self.pretrained_model, tokenizer=tokenizer, device=device)
         
         system_msg = {"role": "system", "content": "You are an expert professor, teaching a student how to solve a problem by providing a full explanation of the solution."}
 
@@ -484,7 +499,8 @@ class AutoDPOModelForCausalLM(PreTrainedModelWrapper):
 
         for dp in tqdm(dataset):
             conversation = Conversation()
-            conversation.add_message(system_msg)
+            if self.use_sys_msg:
+                conversation.add_message(system_msg)
             conversation.add_message({"role": "user", "content": dp["question"]})
 
             conversation = chatbot(

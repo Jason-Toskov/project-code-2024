@@ -1,19 +1,17 @@
-import os
-import yaml
 import glob
-import torch
 import logging
+import os
+from typing import Any, Dict, List, Tuple, Union
+
 import numpy as np
-
-from torch.utils.data import DataLoader
-from sklearn.metrics import accuracy_score
-
-from typing import Dict, Union, List, Any, Tuple
-from transformers import PreTrainedTokenizerBase, AutoTokenizer
-
-from utils import read_jsonl, write_json
+import torch
+import yaml
 from models.model_base import PreTrainedModelWrapper
 from models.model_dpo import AutoDPOModelForCausalLM, AutoDPOModelForSeq2SeqLM
+from sklearn.metrics import accuracy_score
+from torch.utils.data import DataLoader
+from transformers import AutoTokenizer, PreTrainedTokenizerBase
+from utils import read_jsonl, write_json
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("mnlp-2024-auto-evaluator")
@@ -263,6 +261,8 @@ class DPOModelEvaluator():
         policy_rejected_rewards = np.array(policy_rejected_rewards)
         policy_reward_accuracy = (policy_chosen_rewards > policy_rejected_rewards).sum()
         policy_reward_accuracy = policy_reward_accuracy / len(policy_chosen_rewards)
+        
+        
 
         del policy_model
         torch.cuda.empty_cache()
@@ -426,6 +426,15 @@ if __name__ == '__main__':
         # compute the reward accuracy
         policy_reward_acc = evaluator.scoring_reward_computation(test_dataloader)
         metrics["policy_reward_accuracy"] = policy_reward_acc
+        
+        print("accuracy:")
+        print(policy_reward_acc)
+        print(policy_reward_acc)
+        print(policy_reward_acc)
+        print(policy_reward_acc)
+        print(policy_reward_acc)
+        print(policy_reward_acc)
+        print(policy_reward_acc)
 
     elif "mcqa" in eval_method:
         test_dataloader = DataLoader(test_data, batch_size=8)
@@ -437,6 +446,15 @@ if __name__ == '__main__':
         policy_acc= evaluator.scoring_mcqa(test_dataloader)
         eval_method.remove("mcqa")
         metrics["policy_acc"] = policy_acc
+        
+        print("accuracy:")
+        print(policy_acc)
+        print(policy_acc)
+        print(policy_acc)
+        print(policy_acc)
+        print(policy_acc)
+        print(policy_acc)
+        print(policy_acc)
 
         # Loop over the remaining evaluation methods
         for method in eval_method:

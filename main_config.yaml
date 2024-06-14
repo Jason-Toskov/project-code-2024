@@ -1,15 +1,20 @@
 "team_name": "never-leaving-paris" # Your team name
 "eval_method": ["mcqa"] # mcqa, reward, rag, quantiz
 "task_type": "causal_lm" # causal_lm, seq2seq
-"policy_model_path": "Jason-Toskov/llama3-8b-instruct-dpo-mnlp-never-leaving-paris" # Your path to the final checkpoint
-"reference_model_path": "Jason-Toskov/llama3-8b-instruct-dpo-mnlp-never-leaving-paris" # The repo id of your pretrained reference model
-"quantized_policy_model_path": "./checkpoints/best_model_quantized/" # Your path to the final quantized checkpoint
+"policy_model_path": "/scratch/toskov/mnlp/output/llama3_dpo_mathinstruct_base" # Your path to the final checkpoint
+"reference_model_path": "meta-llama/Meta-Llama-3-8B-Instruct" # The repo id of your pretrained reference model
+"quantized_policy_model_path": "/scratch/toskov/mnlp/output/llama3_dpo_mathinstruct_base_dpoquant" # Your path to the final quantized checkpoint
 "rag_policy_model_path": "./checkpoints/best_model_rag/" # Your path to the final RAG checkpoint
-"test_data_path": "./data/mmlu.jsonl" # Your path to the test data
+"test_data_path": "/home/toskov/project-code-2024/datasets/mmlu_ml_compsci_eval_set.jsonl" # Your path to the test data
 "dpo_model_args":  # Put any model arguments required to load your DPO model below
   "reference_model": false
+  "use_system_msg": false
+  "quantized": false
 "rag_model_args": # Put any model arguments required to load your rag model below
   "encoder_model_path": "facebook/bart-large"
   "retriever_model_path": "./checkpoints/rag_retriever"
   "document_dir": "./data/documents"
-"quantized_model_args": null # Put any model arguments required to load your quantized model below
+"quantized_model_args": # Put any model arguments required to load your quantized model below
+  "reference_model": false
+  "use_system_msg": false
+  "quantized": true
