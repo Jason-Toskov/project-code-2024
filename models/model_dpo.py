@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from datasets import Dataset
 from models.model_base import PreTrainedModelWrapper
+from peft import LoraConfig, PeftModelForCausalLM
 from tqdm import tqdm
 from transformers import (
     AutoModelForCausalLM,
@@ -225,9 +226,24 @@ class AutoDPOModelForCausalLM(PreTrainedModelWrapper):
         model.dpo_tokenizer.padding_side = 'left' # to prevent errors with FA
         model.dpo_tokenizer.truncation_side = 'left' # to prevent cutting off last generation
         
+        if type(model.pretrained_model) is not PeftModelForCausalLM:
+            # give it a blank lora to turn off for reference mod calcs
+            print("This should be a reference model!")
+            peft_config = LoraConfig(
+                lora_alpha=128,
+                lora_dropout=0.05,
+                r=256,
+                bias="none",
+                target_modules="all-linear",
+                task_type="CAUSAL_LM",
+            ) 
+        else:
+            peft_config = None
+        
         model.dpo_trainer = DPOTrainer(
             model.pretrained_model,
             ref_model=None,
+            peft_config=peft_config,
             args=model.args,
             train_dataset=Dataset.from_dict({}),
             eval_dataset=Dataset.from_dict({}),
@@ -349,7 +365,11 @@ class AutoDPOModelForCausalLM(PreTrainedModelWrapper):
                 "rejected": [],
             }
             
-            dpo_dataset_dict["prompt"] = [system_msg, msg_qn]
+            if self.use_sys_msg:
+                prompt = [system_msg, msg_qn]
+            else:
+                prompt = [msg_qn]
+            dpo_dataset_dict["prompt"] = prompt
             dpo_dataset_dict["chosen"] = [msg_chosen]
             dpo_dataset_dict["rejected"] = [msg_rejected]
         
