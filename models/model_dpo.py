@@ -567,19 +567,20 @@ class AutoDPOModelForCausalLM(PreTrainedModelWrapper):
                     continue
                 
                 # or if the generation starts with `<letter>` (also common)
-                if answer_string[:3] in ["`A`", "`B`", "`C`", "`D`", "`E`"]:
+                if answer_string[:3] in ["`A`", "`B`", "`C`", "`D`"]:
                     sample_answers.append(answer_string[1])
                     continue
                 
                 # or finally if the generation contains `<letter>` (can happen sometimes)
-                for match in ["`A`", "`B`", "`C`", "`D`", "`E`"]:
+                for match in ["`A`", "`B`", "`C`", "`D`"]:
                     if match in answer_string:
                         sample_answers.append(match[1])
                         continue
             
             if len(sample_answers) == 0:
                 # raise ValueError("No valid answer found.")
-                output_dict["preds"].append("Z")
+                print("No valid answer found after 10 tries, defaulting to C !")
+                output_dict["preds"].append("C")
                 continue
             
             # Get the most frequent answer
