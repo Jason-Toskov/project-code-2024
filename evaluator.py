@@ -261,8 +261,6 @@ class DPOModelEvaluator():
         policy_rejected_rewards = np.array(policy_rejected_rewards)
         policy_reward_accuracy = (policy_chosen_rewards > policy_rejected_rewards).sum()
         policy_reward_accuracy = policy_reward_accuracy / len(policy_chosen_rewards)
-        
-        
 
         del policy_model
         torch.cuda.empty_cache()
@@ -426,15 +424,6 @@ if __name__ == '__main__':
         # compute the reward accuracy
         policy_reward_acc = evaluator.scoring_reward_computation(test_dataloader)
         metrics["policy_reward_accuracy"] = policy_reward_acc
-        
-        print("accuracy:")
-        print(policy_reward_acc)
-        print(policy_reward_acc)
-        print(policy_reward_acc)
-        print(policy_reward_acc)
-        print(policy_reward_acc)
-        print(policy_reward_acc)
-        print(policy_reward_acc)
 
     elif "mcqa" in eval_method:
         test_dataloader = DataLoader(test_data, batch_size=8)
@@ -446,54 +435,36 @@ if __name__ == '__main__':
         policy_acc= evaluator.scoring_mcqa(test_dataloader)
         eval_method.remove("mcqa")
         metrics["policy_acc"] = policy_acc
-        
-        print("accuracy:")
-        print(policy_acc)
-        print(policy_acc)
-        print(policy_acc)
-        print(policy_acc)
-        print(policy_acc)
-        print(policy_acc)
-        print(policy_acc)
 
-    # Loop over the remaining evaluation methods
-    for method in eval_method:
-        if method == "rag":
-            # Check if the documents directory is present
-            assert os.path.isdir("documents"), "You must have a directory named 'documents' with all the documents used for RAG, in the current directory."
-            rag_policy_model_path = main_config["rag_policy_model_path"]
-            evaluator = RAGModelEvaluator(
-                task_type,
-                rag_policy_model_path,
-                rag_model_args)
-            rag_policy_acc = evaluator.scoring_rag(test_dataloader)
-            metrics["rag_policy_acc"] = rag_policy_acc
-        elif method == "quantiz":
-            test_dataloader = DataLoader(test_data, batch_size=8)
-            quantized_model_path = main_config["quantized_policy_model_path"]
-            evaluator = QuantizedEvaluator(
-                task_type=task_type,
-                policy_model_path=policy_model_path,
-                quantized_model_path=quantized_model_path,
-                policy_model_args=dpo_model_args,
-                quantized_model_args=quantized_model_args)
-            quantized_size, orig_size, quantized = evaluator.check_model_quantization()
-            metrics["orig_model_size"] = orig_size
-            metrics["quantized_model_size"] = quantized_size
-            metrics["quantized"] = quantized
-            if not quantized:
-                logger.error("Urgent! An error occurred that might result in 0 points!")
-                logger.error("Error: quantized model size should be less than the original model size!")
-            quantized_policy_acc = evaluator.scoring_quantization(test_dataloader)
-            metrics["quantized_policy_acc"] = quantized_policy_acc
-            
-            print("quantized acc:")
-            print(quantized_policy_acc)
-            print(quantized_policy_acc)
-            print(quantized_policy_acc)
-            print(quantized_policy_acc)
-            print(quantized_policy_acc)
-            print(quantized_policy_acc)
+        # Loop over the remaining evaluation methods
+        for method in eval_method:
+            if method == "rag":
+                # Check if the documents directory is present
+                assert os.path.isdir("documents"), "You must have a directory named 'documents' with all the documents used for RAG, in the current directory."
+                rag_policy_model_path = main_config["rag_policy_model_path"]
+                evaluator = RAGModelEvaluator(
+                    task_type,
+                    rag_policy_model_path,
+                    rag_model_args)
+                rag_policy_acc = evaluator.scoring_rag(test_dataloader)
+                metrics["rag_policy_acc"] = rag_policy_acc
+            elif method == "quantiz":
+                quantized_model_path = main_config["quantized_policy_model_path"]
+                evaluator = QuantizedEvaluator(
+                    task_type=task_type,
+                    policy_model_path=policy_model_path,
+                    quantized_model_path=quantized_model_path,
+                    policy_model_args=dpo_model_args,
+                    quantized_model_args=quantized_model_args)
+                quantized_size, orig_size, quantized = evaluator.check_model_quantization()
+                metrics["orig_model_size"] = orig_size
+                metrics["quantized_model_size"] = quantized_size
+                metrics["quantized"] = quantized
+                if not quantized:
+                    logger.error("Urgent! An error occurred that might result in 0 points!")
+                    logger.error("Error: quantized model size should be less than the original model size!")
+                quantized_policy_acc = evaluator.scoring_quantization(test_dataloader)
+                metrics["quantized_policy_acc"] = quantized_policy_acc
 
         logger.info("Evaluation Completed! Results:")
         logger.info(metrics)
