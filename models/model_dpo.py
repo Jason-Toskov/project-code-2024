@@ -558,7 +558,8 @@ class AutoDPOModelForCausalLM(PreTrainedModelWrapper):
                         continue
             
             if len(sample_answers) == 0:
-                raise ValueError("No valid answer found.")
+                # raise ValueError("No valid answer found.")
+                output_dict["preds"].append("Z")
             
             # Get the most frequent answer
             answer = max(set(sample_answers), key=sample_answers.count)
