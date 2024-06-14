@@ -52,5 +52,5 @@ for i in range(100):
     
     messages.append(copy.deepcopy(conversation_answer.messages))
     
-    with open("llama3_dpo_mathinstruct_base_nosysmsg_gens.json", "w") as f:
+    with open("/scratch/toskov/mnlp/llama3_dpo_mathinstruct_base_nosysmsg_gens.json", "w") as f:
         json.dump(messages, f)
