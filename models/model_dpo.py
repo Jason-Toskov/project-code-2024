@@ -365,7 +365,11 @@ class AutoDPOModelForCausalLM(PreTrainedModelWrapper):
                 "rejected": [],
             }
             
-            dpo_dataset_dict["prompt"] = [system_msg, msg_qn]
+            if self.use_sys_msg:
+                prompt = [system_msg, msg_qn]
+            else:
+                prompt = [msg_qn]
+            dpo_dataset_dict["prompt"] = prompt
             dpo_dataset_dict["chosen"] = [msg_chosen]
             dpo_dataset_dict["rejected"] = [msg_rejected]
         
