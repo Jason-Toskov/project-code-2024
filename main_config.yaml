@@ -1,11 +1,11 @@
 "team_name": "never-leaving-paris" # Your team name
 "eval_method": ["mcqa"] # mcqa, reward, rag, quantiz
 "task_type": "causal_lm" # causal_lm, seq2seq
-"policy_model_path": "/scratch/toskov/mnlp/output/llama3_dpo_mathinstruct_base" # Your path to the final checkpoint
+"policy_model_path": "Jason-Toskov/llama3-8b-instruct-dpo-mnlp-never-leaving-paris-base" # Your path to the final checkpoint
 "reference_model_path": "meta-llama/Meta-Llama-3-8B-Instruct" # The repo id of your pretrained reference model
-"quantized_policy_model_path": "/scratch/toskov/mnlp/output/llama3_dpo_mathinstruct_base_dpoquant" # Your path to the final quantized checkpoint
+"quantized_policy_model_path": "Jason-Toskov/llama3-8b-instruct-dpo-mnlp-never-leaving-paris-quantized" # Your path to the final quantized checkpoint
 "rag_policy_model_path": "./checkpoints/best_model_rag/" # Your path to the final RAG checkpoint
-"test_data_path": "/scratch/toskov/mnlp/mmlu_ml_compsci_eval_set.jsonl" # Your path to the test data
+"test_data_path": "./datasets/mmlu_ml_compsci_eval_set.jsonl" # Your path to the test data
 "dpo_model_args":  # Put any model arguments required to load your DPO model below
   "reference_model": false
   "use_system_msg": false
